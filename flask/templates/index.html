@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>قفا - المساعد الذكي</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <button class="sidebar-toggle">☰</button>
+    <div class="container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="logo-container">
+                <img src="{{ url_for('static', filename='qifa.png') }}" alt="قيفا" class="logo">
+            </div>
+            <div class="search-box">
+                <input type="text" placeholder="بحث...">
+            </div>
+            <button class="new-chat-btn">محادثة جديدة</button>
+            <ul class="chat-history">
+                <!-- Chat history will be added dynamically -->
+            </ul>
+            <div class="user-controls">
+                <button class="toggle-theme-btn">تغيير المظهر</button>
+                <a href="{{ url_for('logout') }}" class="logout-btn">تسجيل الخروج</a>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <div class="chat-window" id="chat-messages">
+                <!-- Messages will appear here -->
+            </div>
+            <div class="chat-input">
+                <input type="text" id="user-input" placeholder="اكتب رسالتك هنا..." dir="rtl">
+                <button onclick="sendMessage()" class="send-button">إرسال</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let chatHistory = [];
+        let isDarkMode = false;
+
+        // Add welcome message on page load
+        window.onload = function() {
+            const welcomeMessage = `يا هلا بك في شات قِفا انا نموذج ذكاء اصطناعي يولد لك الشعر العربي، 
+            كيف اقدر اساعدك؟`;
+            appendMessage(welcomeMessage, false);
+        };
+
+        // Toggle Dark Mode
+        document.querySelector('.toggle-theme-btn').addEventListener('click', function() {
+            document.body.classList.toggle('dark-mode');
+            isDarkMode = !isDarkMode;
+        });
+
+        // New Chat Button
+        document.querySelector('.new-chat-btn').addEventListener('click', function() {
+            chatHistory = [];
+            document.getElementById('chat-messages').innerHTML = '';
+            const welcomeMessage = `يا هلا بك في شات قِفا انا نموذج ذكاء اصطناعي يولد لك الشعر العربي، 
+            كيف اقدر اساعدك؟`;
+            appendMessage(welcomeMessage, false);
+        });
+
+        function appendMessage(content, isUser) {
+            const messagesDiv = document.getElementById('chat-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user-message' : 'ai-message'}`;
+            
+            // Add message content
+            const messageContent = document.createElement('div');
+            messageContent.className = 'message-content';
+            messageContent.innerText = content;
+            messageDiv.appendChild(messageContent);
+            
+            // Add feedback buttons for AI messages only
+            if (!isUser) {
+                const feedbackDiv = document.createElement('div');
+                feedbackDiv.className = 'message-feedback';
+                feedbackDiv.innerHTML = `
+                    <div class="feedback-text">هل كانت هذه الإجابة مفيدة؟</div>
+                    <button onclick="submitFeedback(this, true)" class="feedback-btn helpful">👍</button>
+                    <button onclick="submitFeedback(this, false)" class="feedback-btn not-helpful">👎</button>
+                `;
+                messageDiv.appendChild(feedbackDiv);
+            }
+            
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('user-input');
+            const message = input.value.trim();
+            
+            if (message) {
+                appendMessage(message, true);
+                input.value = '';
+
+                try {
+                    const response = await fetch('/generate', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            input: message,
+                            history: chatHistory
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+
+                    const data = await response.json();
+                    
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+                    
+                    if (data.output) {
+                        appendMessage(data.output, false);
+                        chatHistory = data.history;
+                        
+                        // Add to chat history sidebar
+                        addToChatHistory(message);
+                    } else {
+                        throw new Error('Empty response received');
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    appendMessage('Sorry, an error occurred: ' + error.message, false);
+                }
+            }
+        }
+
+        function addToChatHistory(message) {
+            const historyList = document.querySelector('.chat-history');
+            const historyItem = document.createElement('li');
+            historyItem.textContent = message.substring(0, 30) + (message.length > 30 ? '...' : '');
+            historyList.insertBefore(historyItem, historyList.firstChild);
+        }
+
+        // Add this new function for handling feedback
+        async function submitFeedback(button, isHelpful) {
+            const messageDiv = button.closest('.message');
+            const messageContent = messageDiv.querySelector('.message-content').innerText;
+            const feedbackDiv = messageDiv.querySelector('.message-feedback');
+            
+            try {
+                const response = await fetch('/feedback', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        feedback: messageContent,
+                        helpful: isHelpful
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+
+                // Disable the feedback buttons after submission
+                feedbackDiv.innerHTML = `<span class="feedback-submitted">${isHelpful ? '👍 شكراً على تقييمك' : '👎 شكراً على تقييمك'}</span>`;
+                
+            } catch (error) {
+                console.error('Error submitting feedback:', error);
+                alert('حدث خطأ أثناء إرسال التغذية الراجعة');
+            }
+        }
+
+        document.getElementById('user-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        document.querySelector('.sidebar-toggle').addEventListener('click', function() {
+            document.querySelector('.sidebar').classList.toggle('active');
+        });
+
+        // Close sidebar when clicking outside
+        document.addEventListener('click', function(e) {
+            const sidebar = document.querySelector('.sidebar');
+            const toggle = document.querySelector('.sidebar-toggle');
+            if (!sidebar.contains(e.target) && !toggle.contains(e.target) && sidebar.classList.contains('active')) {
+                sidebar.classList.remove('active');
+            }
+        });
+
+        // إضافة معالجة أحداث الزر والشريط الجانبي
+        const sidebarToggle = document.querySelector('.sidebar-toggle');
+        const sidebar = document.querySelector('.sidebar');
+
+        sidebarToggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            sidebar.classList.toggle('active');
+        });
+
+        // إغلاق الشريط الجانبي عند النقر خارجه
+        document.addEventListener('click', (e) => {
+            if (!sidebar.contains(e.target) && 
+                !sidebarToggle.contains(e.target) && 
+                sidebar.classList.contains('active')) {
+                sidebar.classList.remove('active');
+            }
+        });
+
+        // إغلاق الشريط الجانبي عند تغيير حجم النافذة
+        window.addEventListener('resize', () => {
+            if (window.innerWidth > 768) {
+                sidebar.classList.remove('active');
+            }
+        });
+
+        // منع انتشار النقر داخل الشريط الجانبي
+        sidebar.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const toggleBtn = document.querySelector('.sidebar-toggle');
+            const sidebar = document.querySelector('.sidebar');
+            
+            if (toggleBtn && sidebar) {
+                toggleBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    sidebar.classList.toggle('active');
+                });
+
+                // إغلاق الشريط الجانبي عند النقر خارجه
+                document.addEventListener('click', function(e) {
+                    if (!sidebar.contains(e.target) && 
+                        !toggleBtn.contains(e.target) && 
+                        sidebar.classList.contains('active')) {
+                        sidebar.classList.remove('active');
+                    }
+                });
+
+                // إغلاق الشريط الجانبي عند تغيير حجم النافذة
+                window.addEventListener('resize', function() {
+                    if (window.innerWidth > 768) {
+                        sidebar.classList.remove('active');
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>
+
