@@ -1,0 +1,5 @@
+Flask==3.0.2
+python-dotenv==1.0.1
+ibm-watson-machine-learning==1.0.345
+langchain-core==0.1.30
+requests==2.31.0
